@@ -21,7 +21,6 @@ const loadProject = async name => {
 
   apolloOptions.path = `/${name}/graphql`
   apolloOptions.context = () => {
-    console.debug({ context: name })
     return { meta }
   }
 
