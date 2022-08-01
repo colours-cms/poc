@@ -28,7 +28,8 @@
     "functional-promises": "^2.0.3",
     "graphql": "^16.5.0",
     "graphql-tag": "^2.12.6",
-    "koa": "^2.13.4"
+    "koa": "^2.13.4",
+    "nanoid": "^4.0.0"
   },
   "devDependencies": {
     "nodemon": "^2.0.19",
