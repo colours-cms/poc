@@ -1,12 +1,16 @@
-import { promises as fs } from 'fs'
+import { existsSync, promises as fs } from 'fs'
 import path from 'path'
 import Koa from 'koa'
 import Router from '@koa/router'
 import fp from 'functional-promises'
 import gql from 'graphql-tag'
+import { nanoid } from 'nanoid'
 
 import GraphqlMiddleware from './GraphqlMiddleware.mjs'
+import ConfigMiddleware from './ConfigMiddleware.mjs'
 import { readJson, importDefault } from './utilities.mjs'
+import { UserInputError } from 'apollo-server-core'
+import UrlString from './UrlString.mjs'
 
 const loadProject = async name => {
   const router = new Router({ prefix: `/:projectName` })
@@ -105,11 +109,91 @@ const ProjectRouter = () => {
   return routes
 }
 
-const port = 8000
+/**
+ * @typedef {{
+ *   server: {
+ *     port: number
+ *   }
+ *   paths: {
+ *     projects: string
+ *   }
+ * }} Config
+ */
+
+/**
+ * @typedef {{
+ *   id: string
+ *   alias: string
+ *   name: ?string
+ * }} Project
+ */
+
+/** @type {(config: Config, projectInput: Project) => Promise<void>} */
+const createProject = async (
+  config,
+  { alias: inputAlias, name: inputName },
+) => {
+  const id = nanoid()
+  const alias =
+    inputAlias || `${inputName.toLowerCase().replace(/\W+/g, '-')}-${id}`
+  const name = inputName
+  const projectPath = path.join(config.paths.projects, alias)
+
+  if (existsSync(projectPath)) {
+    throw new UserInputError('Project alias is taken', {
+      messageCode: 'projectExists',
+    })
+  }
+
+  await fs.mkdir(projectPath)
+
+  await fp.all({
+    meta: fs.writeFile(
+      path.join(projectPath, 'meta.json'),
+      JSON.stringify({ id, name }, null, 2),
+    ),
+    typeDefs: fs.writeFile(
+      path.join(projectPath, 'typeDefs.mjs'),
+      `import gql from 'graphql-tag'
+
+      export default gql\`
+        type CustomModel {
+          name: String
+        }
+      
+        type Query {
+          customModels: [CustomModel!]!
+        }
+      
+        schema {
+          query: Query
+        }
+      \`\n`,
+    ),
+    resolvers: fs.writeFile(
+      path.join(projectPath, 'resolvers.mjs'),
+      `export default {
+      Query: {
+        customModels: () =>
+          [...Array(100)].map((_, index) => ({ name: \`${name} \${index}\` })),
+      },
+    }\n`,
+    ),
+  })
+
+  return {
+    meta: {
+      id,
+      name,
+      alias,
+    },
+  }
+}
 
 const typeDefs = gql`
   type Project {
     id: ID!
+    alias: String!
     name: String!
     url: String!
     graphqlUrl: String!
@@ -119,41 +203,81 @@ const typeDefs = gql`
     projects: [Project!]!
   }
 
+  scalar UrlString
+
+  input ProjectInput {
+    name: String!
+    """
+    Used for folders & urls. Will be generated based on name and id if omitted.
+    """
+    alias: UrlString
+  }
+
+  type Mutation {
+    createProject(input: ProjectInput!): Project!
+  }
+
   schema {
     query: Query
+    mutation: Mutation
   }
 `
 
 const resolvers = {
+  Project: {
+    url: meta => `/${meta.alias}`,
+    graphqlUrl: meta => `/${meta.alias}/graphql`,
+  },
+  UrlString,
   Query: {
+    /** @type {import('graphql').GraphQLFieldResolver} */
     projects: (_, __, { projects = {} }) =>
-      Object.entries(projects).map(([alias, { meta }]) => {
-        const url = `/${alias}`
-        const graphqlUrl = `${url}/graphql`
+      Object.entries(projects).map(([alias, { meta }]) => ({ ...meta, alias })),
+  },
+  Mutation: {
+    /** @type {import('graphql').GraphQLFieldResolver} */
+    createProject: async (_, { input }, { config }) => {
+      const { meta } = await createProject(config, input)
 
-        return {
-          ...meta,
-          url,
-          graphqlUrl,
-        }
-      }),
+      return meta
+    },
   },
 }
 
+/** @type {Config} */
+const config = {
+  server: {
+    port: 8000,
+  },
+  paths: {
+    projects: path.join(process.cwd(), '/colours/projects'),
+  },
+}
+
+/** @type {() => Promise<Config>} */
 const start = async () => {
   const koa = new Koa()
 
-  const projectsPath = path.join(process.cwd(), '/colours/projects')
   koa
-    .use(await ProjectManager(projectsPath))
+    .use(ConfigMiddleware(config))
+    .use(await ProjectManager(config.paths.projects))
     .use(
-      await GraphqlMiddleware({ typeDefs, resolvers, context: () => memory }),
+      await GraphqlMiddleware({
+        typeDefs,
+        resolvers,
+        context: () => ({
+          ...memory,
+          config,
+        }),
+      }),
     )
     .use(ProjectRouter())
 
-  koa.listen(port)
+  koa.listen(config.server.port)
+
+  return config
 }
 
-start().then(() => {
-  console.info(`ready => http://localhost:${port}`)
+start().then(config => {
+  console.info(`ready => http://localhost:${config.server.port}`)
 })
