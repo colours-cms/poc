@@ -2,31 +2,15 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import Koa from 'koa'
 import Router from '@koa/router'
-import { ApolloServer } from 'apollo-server-koa'
 import fp from 'functional-promises'
 import gql from 'graphql-tag'
-import { ApolloServerPluginLandingPageGraphQLPlayground } from 'apollo-server-core'
+
+import GraphqlMiddleware from './GraphqlMiddleware.mjs'
 
 const readJson = fp.chain().then(fs.readFile).then(JSON.parse).chainEnd()
 const importDefault = fp
   .chain()
   .then(async file => (await import(file)).default)
-  .chainEnd()
-
-const GraphqlMiddleware = fp
-  .chain()
-  .then(async ({ path, ...apolloServerOptions }) => {
-    const apolloServer = new ApolloServer({
-      ...apolloServerOptions,
-      plugins: [ApolloServerPluginLandingPageGraphQLPlayground()],
-    })
-
-    await apolloServer.start()
-
-    const apolloMiddleware = apolloServer.getMiddleware({ path })
-
-    return apolloMiddleware
-  })
   .chainEnd()
 
 const loadProject = async name => {
