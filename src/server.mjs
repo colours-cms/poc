@@ -3,93 +3,186 @@ import path from 'path'
 import Koa from 'koa'
 import Router from '@koa/router'
 import { ApolloServer } from 'apollo-server-koa'
+import fp from 'functional-promises'
+import gql from 'graphql-tag'
+import { ApolloServerPluginLandingPageGraphQLPlayground } from 'apollo-server-core'
+
+const readJson = fp.chain().then(fs.readFile).then(JSON.parse).chainEnd()
+const importDefault = fp
+  .chain()
+  .then(async file => (await import(file)).default)
+  .chainEnd()
+
+const GraphqlMiddleware = fp
+  .chain()
+  .then(async ({ path, ...apolloServerOptions }) => {
+    const apolloServer = new ApolloServer({
+      ...apolloServerOptions,
+      plugins: [ApolloServerPluginLandingPageGraphQLPlayground()],
+    })
+
+    await apolloServer.start()
+
+    const apolloMiddleware = apolloServer.getMiddleware({ path })
+
+    return apolloMiddleware
+  })
+  .chainEnd()
 
 const loadProject = async name => {
-  const router = new Router({ prefix: `/projects/:name` })
+  const router = new Router({ prefix: `/:projectName` })
 
   const projectPath = path.join(process.cwd(), `/colours/projects/${name}`)
 
-  const meta = JSON.parse(
-    await fs.readFile(path.join(projectPath, '.meta.json')),
-  )
+  const { meta, ...apolloOptions } = await fp.all({
+    meta: readJson(path.join(projectPath, 'meta.json')),
+    typeDefs: importDefault(path.join(projectPath, 'typeDefs.mjs')),
+    resolvers: importDefault(path.join(projectPath, 'resolvers.mjs')),
+  })
 
-  const { default: typeDefs } = await import(
-    path.join(projectPath, 'typeDefs.mjs')
-  )
-  const { default: resolvers } = await import(
-    path.join(projectPath, 'resolvers.mjs')
-  )
+  apolloOptions.path = `/${name}/graphql`
+  apolloOptions.context = () => {
+    console.debug({ context: name })
+    return { meta }
+  }
 
-  router.all('/', async (ctx, next) => {
+  router.get('/', async (ctx, next) => {
     ctx.body = meta
+
     await next()
   })
 
-  const apolloServer = new ApolloServer({
-    typeDefs: typeDefs(),
-    resolvers: resolvers(),
-    context: () => ({ meta }),
-  })
-  await apolloServer.start()
+  router.all('/graphql', await GraphqlMiddleware(apolloOptions))
 
-  const apolloMiddleware = apolloServer.getMiddleware({
-    path: `/projects/${name}/graphql`,
-  })
+  const middleware = router.routes()
 
-  router.all('/graphql', apolloMiddleware)
-
-  return router.routes()
+  return {
+    meta,
+    middleware,
+  }
 }
 
-const loadProjects = async () => {
-  const projectsPath = path.join(process.cwd(), '/colours/projects')
-  const ls = await fs.readdir(projectsPath)
+/**
+ * @typedef ProjectMiddleware
+ * @type {import('koa').KoaMiddleware}
+ */
 
-  return Object.fromEntries(
-    await Promise.all(ls.map(async name => [name, await loadProject(name)])),
+/** @type {async (projectsDirectory: string) => {[alias:string]: ProjectMiddleware}} */
+const loadProjects = fp
+  .chain()
+  .then(fs.readdir)
+  .then(async directories =>
+    Object.fromEntries(
+      await Promise.all(
+        directories.map(async projectAlias => [
+          projectAlias,
+          await loadProject(projectAlias),
+        ]),
+      ),
+    ),
   )
+  .chainEnd()
+
+const memory = {
+  projects: undefined,
 }
 
-let projects = undefined
-const projectManager = async (ctx, next) => {
-  if (!projects) {
-    projects = await loadProjects()
-  }
+const ProjectManager = async projectsPath => {
+  const projects = await loadProjects(projectsPath)
 
-  ctx.state.projects = projects
+  memory.projects = projects
 
-  await next()
-}
+  return async (ctx, next) => {
+    ctx.state.projects = memory.projects
 
-const dynamicRouter = async (ctx, next) => {
-  const project = ctx.state.projects[ctx.params.name]
-
-  if (!project) {
-    ctx.body = 'project does not exist'
-    ctx.status = 404
-    return await next()
-  }
-
-  try {
-    await project(ctx, next)
-  } catch (error) {
-    console.error({ error })
+    await next()
   }
 }
 
-const start = () => {
+const ProjectRouter = () => {
+  const router = new Router({ prefix: '/:projectName' })
+
+  router.all(['/', '/graphql'], async (ctx, next) => {
+    const project = ctx.state.projects[ctx.params.projectName]
+
+    if (!project) {
+      ctx.body = {
+        errors: [
+          {
+            message: 'project does not exist',
+            messageCode: 'projectDoesNotExist',
+          },
+        ],
+      }
+      ctx.status = 404
+
+      return
+    }
+    ctx.state.project = project
+
+    const { middleware } = project
+
+    try {
+      await middleware(ctx, next)
+    } catch (error) {
+      console.error({ error })
+    }
+  })
+
+  const routes = router.routes()
+
+  return routes
+}
+
+const port = 8000
+
+const typeDefs = gql`
+  type Project {
+    id: ID!
+    name: String!
+    url: String!
+    graphqlUrl: String!
+  }
+
+  type Query {
+    projects: [Project!]!
+  }
+
+  schema {
+    query: Query
+  }
+`
+
+const resolvers = {
+  Query: {
+    projects: (_, __, { projects = {} }) =>
+      Object.entries(projects).map(([alias, { meta }]) => {
+        const url = `/${alias}`
+        const graphqlUrl = `${url}/graphql`
+
+        return {
+          ...meta,
+          url,
+          graphqlUrl,
+        }
+      }),
+  },
+}
+
+const start = async () => {
   const koa = new Koa()
-  const router = new Router({ prefix: '/projects/:name' })
 
-  koa.use(projectManager)
+  const projectsPath = path.join(process.cwd(), '/colours/projects')
+  koa
+    .use(await ProjectManager(projectsPath))
+    .use(
+      await GraphqlMiddleware({ typeDefs, resolvers, context: () => memory }),
+    )
+    .use(ProjectRouter())
 
-  router.all(['/', '/graphql'], dynamicRouter)
-
-  koa.use(router.routes()).use(router.allowedMethods())
-
-  koa.listen(8000)
-
-  console.info('running', koa)
+  koa.listen(port)
 }
 
-start()
+start().then(() => {
+  console.info(`ready => http://localhost:${port}`)
+})
