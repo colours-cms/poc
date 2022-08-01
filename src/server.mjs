@@ -201,6 +201,7 @@ const typeDefs = gql`
 
   type Query {
     projects: [Project!]!
+    reloadProjects: [Project!]!
   }
 
   scalar UrlString
@@ -233,6 +234,16 @@ const resolvers = {
     /** @type {import('graphql').GraphQLFieldResolver} */
     projects: (_, __, { projects = {} }) =>
       Object.entries(projects).map(([alias, { meta }]) => ({ ...meta, alias })),
+    reloadProjects: async (_, __, { config }) => {
+      const projects = await loadProjects(config.paths.projects)
+
+      memory.projects = projects
+
+      return Object.entries(projects).map(([alias, { meta }]) => ({
+        ...meta,
+        alias,
+      }))
+    },
   },
   Mutation: {
     /** @type {import('graphql').GraphQLFieldResolver} */
