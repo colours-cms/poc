@@ -38,12 +38,7 @@ const loadProject = async name => {
   }
 }
 
-/**
- * @typedef ProjectMiddleware
- * @type {import('koa').KoaMiddleware}
- */
-
-/** @type {async (projectsDirectory: string) => {[alias:string]: ProjectMiddleware}} */
+/** @type {(projectsDirectory: string) => Promise<{[alias:string]: import('koa').Middleware}>} */
 const loadProjects = fp
   .chain()
   .then(fs.readdir)
