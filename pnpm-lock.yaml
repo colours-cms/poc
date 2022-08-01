@@ -3,7 +3,9 @@ lockfileVersion: 5.4
 specifiers:
   '@koa/router': ^12.0.0
   apollo-server: ^3.10.0
+  apollo-server-core: ^3.10.0
   apollo-server-koa: ^3.10.0
+  functional-promises: ^2.0.3
   graphql: ^16.5.0
   graphql-tag: ^2.12.6
   koa: ^2.13.4
@@ -13,7 +15,9 @@ specifiers:
 dependencies:
   '@koa/router': 12.0.0
   apollo-server: 3.10.0_graphql@16.5.0
+  apollo-server-core: 3.10.0_graphql@16.5.0
   apollo-server-koa: 3.10.0_graphql@16.5.0+koa@2.13.4
+  functional-promises: 2.0.3
   graphql: 16.5.0
   graphql-tag: 2.12.6_graphql@16.5.0
   koa: 2.13.4
@@ -867,6 +871,10 @@ packages:
 
   /function-bind/1.1.1:
     resolution: {integrity: sha512-yIovAzMX49sF8Yl58fSCWJ5svSLuaibPxXQJFLmBObTuCr0Mf1KiPopGM9NiFjiYBCbfaa2Fh6breQ6ANVTI0A==}
+    dev: false
+
+  /functional-promises/2.0.3:
+    resolution: {integrity: sha512-N8d4KTOMqvoQYw5YewrgK2zxaLaN/bD2Eym8a2wGpAtDi+Bho6KTmvEgUM1cPy+PQUGj2pa4vS8aUJyGQL8d9g==}
     dev: false
 
   /get-intrinsic/1.1.2:
