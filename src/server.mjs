@@ -20,9 +20,7 @@ const loadProject = async name => {
   })
 
   apolloOptions.path = `/${name}/graphql`
-  apolloOptions.context = () => {
-    return { meta }
-  }
+  apolloOptions.context = () => ({ meta })
 
   router.get('/', async (ctx, next) => {
     ctx.body = meta
