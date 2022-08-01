@@ -2,6 +2,7 @@ import { ApolloServer } from 'apollo-server-koa'
 import { ApolloServerPluginLandingPageGraphQLPlayground } from 'apollo-server-core'
 import fp from 'functional-promises'
 
+/** @type {(config: import('apollo-server').Config) => import('koa').Middleware} */
 const GraphqlMiddleware = fp
   .chain()
   .then(async ({ path, ...apolloServerOptions }) => {
