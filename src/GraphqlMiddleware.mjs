@@ -1,5 +1,6 @@
 import { ApolloServer } from 'apollo-server-koa'
 import { ApolloServerPluginLandingPageGraphQLPlayground } from 'apollo-server-core'
+import fp from 'functional-promises'
 
 const GraphqlMiddleware = fp
   .chain()
