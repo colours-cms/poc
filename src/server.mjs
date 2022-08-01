@@ -6,12 +6,7 @@ import fp from 'functional-promises'
 import gql from 'graphql-tag'
 
 import GraphqlMiddleware from './GraphqlMiddleware.mjs'
-
-const readJson = fp.chain().then(fs.readFile).then(JSON.parse).chainEnd()
-const importDefault = fp
-  .chain()
-  .then(async file => (await import(file)).default)
-  .chainEnd()
+import { readJson, importDefault } from './utilities.mjs'
 
 const loadProject = async name => {
   const router = new Router({ prefix: `/:projectName` })
