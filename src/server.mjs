@@ -10,7 +10,7 @@ import GraphqlMiddleware from './middlewares/GraphqlMiddleware.mjs'
 import ConfigMiddleware from './middlewares/ConfigMiddleware.mjs'
 import { readJson, importDefault } from './utilities.mjs'
 import { UserInputError } from 'apollo-server-core'
-import UrlString from './UrlString.mjs'
+import UrlString from './graphql/types/UrlString.mjs'
 
 const loadProject = async name => {
   const router = new Router({ prefix: `/:projectName` })
