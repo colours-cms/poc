@@ -1,79 +1,12 @@
-import { existsSync, promises as fs } from 'fs'
 import path from 'path'
 import Koa from 'koa'
-import Router from '@koa/router'
-import fp from 'functional-promises'
 import gql from 'graphql-tag'
-import { nanoid } from 'nanoid'
 
 import GraphqlMiddleware from './middlewares/GraphqlMiddleware.mjs'
 import ConfigMiddleware from './middlewares/ConfigMiddleware.mjs'
 import ProjectRouter from './middlewares/ProjectRouter.mjs'
-import { readJson, importDefault } from './utilities.mjs'
-import { UserInputError } from 'apollo-server-core'
+import ProjectManager from './middlewares/ProjectManager.mjs'
 import UrlString from './graphql/types/UrlString.mjs'
-
-const loadProject = async name => {
-  const router = new Router({ prefix: `/:projectName` })
-
-  const projectPath = path.join(process.cwd(), `/colours/projects/${name}`)
-
-  const { meta, ...apolloOptions } = await fp.all({
-    meta: readJson(path.join(projectPath, 'meta.json')),
-    typeDefs: importDefault(path.join(projectPath, 'typeDefs.mjs')),
-    resolvers: importDefault(path.join(projectPath, 'resolvers.mjs')),
-  })
-
-  apolloOptions.path = `/${name}/graphql`
-  apolloOptions.context = () => ({ meta })
-
-  router.get('/', async (ctx, next) => {
-    ctx.body = meta
-
-    await next()
-  })
-
-  router.all('/graphql', await GraphqlMiddleware(apolloOptions))
-
-  const middleware = router.routes()
-
-  return {
-    meta,
-    middleware,
-  }
-}
-
-/** @type {(projectsDirectory: string) => Promise<{[alias:string]: import('koa').Middleware}>} */
-const loadProjects = fp
-  .chain()
-  .then(fs.readdir)
-  .then(async directories =>
-    Object.fromEntries(
-      await Promise.all(
-        directories.map(async projectAlias => [
-          projectAlias,
-          await loadProject(projectAlias),
-        ]),
-      ),
-    ),
-  )
-  .chainEnd()
-
-const memory = {
-  projects: undefined,
-}
-
-const ProjectManager = async projectsPath => {
-  const projects = await loadProjects(projectsPath)
-
-  memory.projects = projects
-
-  return async (ctx, next) => {
-    ctx.state.projects = memory.projects
-
-    await next()
-  }
-}
 
 /**
  * @typedef {{
@@ -93,68 +26,6 @@ const ProjectManager = async projectsPath => {
  *   name: ?string
  * }} Project
  */
-
-/** @type {(config: Config, projectInput: Project) => Promise<void>} */
-const createProject = async (
-  config,
-  { alias: inputAlias, name: inputName },
-) => {
-  const id = nanoid()
-  const alias =
-    inputAlias || `${inputName.toLowerCase().replace(/\W+/g, '-')}-${id}`
-  const name = inputName
-  const projectPath = path.join(config.paths.projects, alias)
-
-  if (existsSync(projectPath)) {
-    throw new UserInputError('Project alias is taken', {
-      messageCode: 'projectExists',
-    })
-  }
-
-  await fs.mkdir(projectPath)
-
-  await fp.all({
-    meta: fs.writeFile(
-      path.join(projectPath, 'meta.json'),
-      JSON.stringify({ id, name }, null, 2),
-    ),
-    typeDefs: fs.writeFile(
-      path.join(projectPath, 'typeDefs.mjs'),
-      `import gql from 'graphql-tag'
-
-      export default gql\`
-        type CustomModel {
-          name: String
-        }
-      
-        type Query {
-          customModels: [CustomModel!]!
-        }
-      
-        schema {
-          query: Query
-        }
-      \`\n`,
-    ),
-    resolvers: fs.writeFile(
-      path.join(projectPath, 'resolvers.mjs'),
-      `export default {
-      Query: {
-        customModels: () =>
-          [...Array(100)].map((_, index) => ({ name: \`${name} \${index}\` })),
-      },
-    }\n`,
-    ),
-  })
-
-  return {
-    meta: {
-      id,
-      name,
-      alias,
-    },
-  }
-}
 
 const typeDefs = gql`
   type Project {
@@ -198,12 +69,10 @@ const resolvers = {
   UrlString,
   Query: {
     /** @type {import('graphql').GraphQLFieldResolver} */
-    projects: (_, __, { projects = {} }) =>
+    projects: (_, __, { state: { projects = {} } }) =>
       Object.entries(projects).map(([alias, { meta }]) => ({ ...meta, alias })),
-    reloadProjects: async (_, __, { config }) => {
-      const projects = await loadProjects(config.paths.projects)
-
-      memory.projects = projects
+    reloadProjects: async (_, __, { state }) => {
+      const projects = await state.reloadProjects()
 
       return Object.entries(projects).map(([alias, { meta }]) => ({
         ...meta,
@@ -213,8 +82,8 @@ const resolvers = {
   },
   Mutation: {
     /** @type {import('graphql').GraphQLFieldResolver} */
-    createProject: async (_, { input }, { config }) => {
-      const { meta } = await createProject(config, input)
+    createProject: async (_, { input }, { state }) => {
+      const { meta } = await state.createProject(input)
 
       return meta
     },
@@ -237,14 +106,14 @@ const start = async () => {
 
   koa
     .use(ConfigMiddleware(config))
-    .use(await ProjectManager(config.paths.projects))
+    .use(await ProjectManager(config))
     .use(
       await GraphqlMiddleware({
         typeDefs,
         resolvers,
-        context: () => ({
-          ...memory,
+        context: ({ ctx }) => ({
           config,
+          state: ctx.state,
         }),
       }),
     )
