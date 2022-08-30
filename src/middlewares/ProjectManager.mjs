@@ -1,5 +1,7 @@
-import { existsSync, promises as fs } from 'fs'
-import path from 'path'
+import { existsSync, promises as fs } from 'node:fs'
+import path from 'node:path'
+import assert from 'node:assert'
+
 import Router from '@koa/router'
 import fp from 'functional-promises'
 import { nanoid } from 'nanoid'
@@ -7,6 +9,17 @@ import { UserInputError } from 'apollo-server-core'
 
 import { readJson, importDefault } from '../utilities.mjs'
 import GraphqlMiddleware from './GraphqlMiddleware.mjs'
+import Prisma from '../prisma.mjs'
+import { GraphQLError } from 'graphql'
+
+/**
+ * @typedef {{
+ *   id: string
+ *   alias: string
+ *   name: string
+ *   directory: string
+ * }} Project
+ */
 
 const loadProject = async name => {
   const router = new Router({ prefix: `/:projectName` })
@@ -66,31 +79,82 @@ const ReloadProjects = projectsPath => async () => {
   return projects
 }
 
-/** @type {(config: import('../server.mjs').Config, projectInput: Project) => Promise<void>} */
+/** @type {(string?: string) => string} */
+const aliasify = string => string?.replace(/\W+/gi, '-').replace(/^-|-$/g, '')
+
+/**
+ *  @typedef {Partial<Omit<Project, 'id' | 'directory'>>} ProjectInput
+ *
+ *  @type {(projectsPath: string) => (projectInput?: ProjectInput) => Promise<void>}
+ */
 const CreateProject =
   projectsPath =>
-  async ({ alias: inputAlias, name: inputName }) => {
-    const id = nanoid()
-    const alias =
-      inputAlias || `${inputName.toLowerCase().replace(/\W+/g, '-')}-${id}`
-    const name = inputName
-    const projectPath = path.join(projectsPath, alias)
+  async (input = {}) => {
+    if (input.alias) {
+      const nonWordCharacters = input.alias.replace(/\w/, '')
 
-    if (existsSync(projectPath)) {
-      throw new UserInputError('Project alias is taken', {
-        messageCode: 'projectExists',
-      })
+      assert(
+        !/\W/.test(alias),
+        new UserInputError(
+          `Alias cannot contain non-word (\\W) characters: '${nonWordCharacters}'`,
+          {
+            messageCode: 'aliasIllegal',
+          },
+        ),
+      )
     }
 
-    await fs.mkdir(projectPath)
+    const id = nanoid()
+    const name = input.name?.trim() || id
+    const alias = input.alias || aliasify(input.name) || id
+
+    assert(
+      alias.length > 2,
+      new UserInputError(
+        `Alias must be at least 3 characters long: '${alias}'`,
+        {
+          messageCode: 'aliasShort',
+        },
+      ),
+    )
+
+    const directory = path.join(projectsPath, alias)
+
+    // assert(
+    //   !existsSync(directory),
+    //   new UserInputError(`Project alias '${alias}' is taken`, {
+    //     messageCode: 'projectExists',
+    //   }),
+    // )
+
+    // await fs.mkdir(directory)
+
+    /** @type {Project} */
+    const project = {
+      id,
+      name,
+      alias,
+      directory,
+    }
+
+    const prisma = Prisma({ project })
+    try {
+      await prisma.init({
+        datasourceProvider: 'mongodb',
+        url: `mongodb+srv://root:root@localhost/${project.alias}?retryWrites=true&w=majority`,
+      })
+      await prisma.migrate()
+    } catch (error) {
+      throw new GraphQLError(error.message, { out: error.out })
+    }
 
     await fp.all({
       meta: fs.writeFile(
-        path.join(projectPath, 'meta.json'),
+        path.join(directory, 'meta.json'),
         JSON.stringify({ id, name }, null, 2),
       ),
       typeDefs: fs.writeFile(
-        path.join(projectPath, 'typeDefs.mjs'),
+        path.join(directory, 'typeDefs.mjs'),
         `import gql from 'graphql-tag'
 
       export default gql\`
@@ -108,7 +172,7 @@ const CreateProject =
       \`\n`,
       ),
       resolvers: fs.writeFile(
-        path.join(projectPath, 'resolvers.mjs'),
+        path.join(directory, 'resolvers.mjs'),
         `export default {
       Query: {
         customModels: () =>
@@ -118,13 +182,7 @@ const CreateProject =
       ),
     })
 
-    return {
-      meta: {
-        id,
-        name,
-        alias,
-      },
-    }
+    return { meta: project }
   }
 
 /** @type {(config: import('../server.mjs').Config) => Promise<import('koa').Middleware>} */

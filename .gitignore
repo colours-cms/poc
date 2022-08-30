@@ -1,3 +1,5 @@
 node_modules/
 colours/
 db/data/
+
+docker-compose.override.yml

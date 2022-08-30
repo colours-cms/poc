@@ -7,6 +7,7 @@ import ConfigMiddleware from './middlewares/ConfigMiddleware.mjs'
 import ProjectRouter from './middlewares/ProjectRouter.mjs'
 import ProjectManager from './middlewares/ProjectManager.mjs'
 import UrlString from './graphql/types/UrlString.mjs'
+import Prisma from './prisma.mjs'
 
 /**
  * @typedef {{
@@ -17,14 +18,6 @@ import UrlString from './graphql/types/UrlString.mjs'
  *     projects: string
  *   }
  * }} Config
- */
-
-/**
- * @typedef {{
- *   id: string
- *   alias: string
- *   name: ?string
- * }} Project
  */
 
 const typeDefs = gql`
@@ -44,7 +37,7 @@ const typeDefs = gql`
   scalar UrlString
 
   input ProjectInput {
-    name: String!
+    name: String
     """
     Used for folders & urls. Will be generated based on name and id if omitted.
     """
@@ -52,7 +45,7 @@ const typeDefs = gql`
   }
 
   type Mutation {
-    createProject(input: ProjectInput!): Project!
+    createProject(input: ProjectInput): Project!
   }
 
   schema {

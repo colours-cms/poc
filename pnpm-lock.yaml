@@ -2,6 +2,7 @@ lockfileVersion: 5.4
 
 specifiers:
   '@koa/router': ^12.0.0
+  '@prisma/client': ^4.2.1
   apollo-server: ^3.10.0
   apollo-server-core: ^3.10.0
   apollo-server-koa: ^3.10.0
@@ -12,9 +13,11 @@ specifiers:
   nanoid: ^4.0.0
   nodemon: ^2.0.19
   prettier: ^2.7.1
+  prisma: ^4.2.1
 
 dependencies:
   '@koa/router': 12.0.0
+  '@prisma/client': 4.2.1_prisma@4.2.1
   apollo-server: 3.10.0_graphql@16.5.0
   apollo-server-core: 3.10.0_graphql@16.5.0
   apollo-server-koa: 3.10.0_graphql@16.5.0+koa@2.13.4
@@ -27,6 +30,7 @@ dependencies:
 devDependencies:
   nodemon: 2.0.19
   prettier: 2.7.1
+  prisma: 4.2.1
 
 packages:
 
@@ -200,6 +204,28 @@ packages:
       methods: 1.1.2
       path-to-regexp: 6.2.1
     dev: false
+
+  /@prisma/client/4.2.1_prisma@4.2.1:
+    resolution: {integrity: sha512-PZBkY60+k5oix+e6IUfl3ub8TbRLNsPLdfWrdy2eh80WcHTaT+/UfvXf/B7gXedH7FRtbPFHZXk1hZenJiJZFQ==}
+    engines: {node: '>=14.17'}
+    requiresBuild: true
+    peerDependencies:
+      prisma: '*'
+    peerDependenciesMeta:
+      prisma:
+        optional: true
+    dependencies:
+      '@prisma/engines-version': 4.2.0-33.2920a97877e12e055c1333079b8d19cee7f33826
+      prisma: 4.2.1
+    dev: false
+
+  /@prisma/engines-version/4.2.0-33.2920a97877e12e055c1333079b8d19cee7f33826:
+    resolution: {integrity: sha512-tktkqdiwqE4QhmE088boPt+FwPj1Jub/zk+5F6sEfcRHzO5yz9jyMD5HFVtiwxZPLx/8Xg9ElnuTi8E5lWVQFQ==}
+    dev: false
+
+  /@prisma/engines/4.2.1:
+    resolution: {integrity: sha512-0KqBwREUOjBiHwITsQzw2DWfLHjntvbqzGRawj4sBMnIiL5CXwyDUKeHOwXzKMtNr1rEjxEsypM14g0CzLRK3g==}
+    requiresBuild: true
 
   /@protobufjs/aspromise/1.1.2:
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -501,9 +527,9 @@ packages:
       '@koa/cors': 3.3.0
       '@types/accepts': 1.3.5
       '@types/koa': 2.13.5
-      '@types/koa__cors': 3.3.0
       '@types/koa-bodyparser': 4.3.7
       '@types/koa-compose': 3.2.5
+      '@types/koa__cors': 3.3.0
       accepts: 1.3.8
       apollo-server-core: 3.10.0_graphql@16.5.0
       apollo-server-types: 3.6.2_graphql@16.5.0
@@ -1247,6 +1273,14 @@ packages:
     engines: {node: '>=10.13.0'}
     hasBin: true
     dev: true
+
+  /prisma/4.2.1:
+    resolution: {integrity: sha512-HuYqnTDgH8atjPGtYmY0Ql9XrrJnfW7daG1PtAJRW0E6gJxc50lY3vrIDn0yjMR3TvRlypjTcspQX8DT+xD4Sg==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+    requiresBuild: true
+    dependencies:
+      '@prisma/engines': 4.2.1
 
   /proxy-addr/2.0.7:
     resolution: {integrity: sha512-llQsMLSUDUPT44jdrU/O37qlnifitDP+ZwrmmZcoSKyLKvtZxpyV0n2/bD/N4tBAAZ/gJEdZU7KMraoK1+XYAg==}
